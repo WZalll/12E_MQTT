@@ -1,46 +1,76 @@
 
-This directory is intended for project specific (private) libraries.
-PlatformIO will compile them to static libraries and link into the executable file.
+# DeviceCore 库使用说明
 
-The source code of each library should be placed in a separate directory
-("lib/your_library_name/[Code]").
+DeviceCore 库封装了原始的 Wi-Fi、MQTT、串口转发以及指示灯逻辑，使得 `src/main.cpp` 仅负责配置与调用。以下内容帮助你快速上手：
 
-For example, see the structure of the following example libraries `Foo` and `Bar`:
+## 目录结构
 
-|--lib
-|  |
-|  |--Bar
-|  |  |--docs
-|  |  |--examples
-|  |  |--src
-|  |     |- Bar.c
-|  |     |- Bar.h
-|  |  |- library.json (optional. for custom build options, etc) https://docs.platformio.org/page/librarymanager/config.html
-|  |
-|  |--Foo
-|  |  |- Foo.c
-|  |  |- Foo.h
-|  |
-|  |- README --> THIS FILE
-|
-|- platformio.ini
-|--src
-   |- main.c
-
-Example contents of `src/main.c` using Foo and Bar:
+```text
+lib/
+  DeviceCore/
+    src/
+      DeviceCore.h
+      DeviceCore.cpp
+  README (本文件)
 ```
-#include <Foo.h>
-#include <Bar.h>
 
-int main (void)
+PlatformIO 会自动扫描 `lib/` 下的子目录并将其编译为静态库，无需手动配置。
+
+## 快速开始
+
+1. 在 `main.cpp` 中包含库头文件：
+
+   ```cpp
+   #include <DeviceCore.h>
+   ```
+
+2. 构造 `DeviceCore::DeviceConfig`，填入你的网络、MQTT 以及引脚配置。
+3. 使用配置创建 `DeviceCore::DeviceController` 实例，在 `setup()` 调用 `begin()`，在 `loop()` 调用 `loop()`：
+
+   ```cpp
+   DeviceCore::DeviceConfig config = { /* 填入配置字段 */ };
+   DeviceCore::DeviceController controller(config);
+
+   void setup() {
+     controller.begin();
+   }
+
+   void loop() {
+     controller.loop();
+   }
+   ```
+
+## 配置字段说明
+
+| 字段 | 说明 |
+| ---- | ---- |
+| `ssid` / `password` | Wi-Fi STA 模式的 SSID 与密码。 |
+| `mqttServer` / `mqttPort` | MQTT 服务器地址与端口。 |
+| `clientId` | MQTT 客户端 ID，为空时默认 `esp_client`。 |
+| `primaryTopic` | 主订阅/心跳主题，同时用于常规消息推送。 |
+| `serialTopic` | 串口转发主题；可与主主题相同。 |
+| `pinErr` / `pinUser1` | 两个 LED 引脚，低电平点亮。 |
+| `heartbeatInterval` | 心跳发布周期（毫秒）。 |
+| `user1PulseDuration` / `errPulseDuration` | 指示灯脉冲保持时间（毫秒）。 |
+| `serialBufferLimit` | 串口缓冲区大小，默认 256 字节。 |
+| `serialBaud` | 启动时的串口波特率，默认 115200。 |
+
+## 回调与控制
+
+MQTT 消息支持 JSON 指令：
+
+```json
 {
-  ...
+  "cmd": "heartbeat",
+  "enable": true
 }
-
 ```
 
-The PlatformIO Library Dependency Finder will find automatically dependent
-libraries by scanning project source files.
+通过 `cmd=heartbeat` 可远程开启/关闭心跳。亦可在运行时调用 `DeviceController::setHeartbeatEnabled(bool)` 手动切换。
 
-More information about PlatformIO Library Dependency Finder
-- https://docs.platformio.org/page/librarymanager/ldf.html
+## 常见问题
+
+- **如何调整串口转发行为？** 修改配置中的 `serialTopic` 或 `serialBufferLimit`；库内部会在 Wi-Fi/MQTT 不可用时自动闪烁错误灯。
+- **需要自定义订阅回调？** 当前版本专注于心跳控制，可扩展 `DeviceCore.cpp` 中的 `onMqttMessage` 以满足需求。
+
+更多关于 PlatformIO 自定义库的说明，请参阅官方文档：<https://docs.platformio.org/page/librarymanager/ldf.html>
